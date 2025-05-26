@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+requests
+pyppeteer
+beautifulsoup4
+pytest-asyncio
+pypdf
+pyppeteer_stealth
+chromium
+boto3
+botocore
+pytest
+python-dotenv
+PyMuPDF
