@@ -10,6 +10,13 @@ RUN apt-get update && apt-get install -y \
     xorg \
     xvfb \
     dbus-x11 \
+    fonts-noto \
+    fonts-noto-core \
+    fonts-noto-ui-core \
+    fonts-noto-unhinted \
+    fonts-noto-mono \
+    fonts-noto-color-emoji \
+    fonts-noto-cjk \
     --no-install-recommends
 
 RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
