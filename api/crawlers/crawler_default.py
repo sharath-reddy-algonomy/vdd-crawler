@@ -9,7 +9,7 @@ import os
 import logging
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("crawler")
 
 
 async def perform_due_diligence(actor_name, schedule_id: str, pages: int = 3):
