@@ -192,7 +192,7 @@ class CrawlerPage:
                     logger.error(f'Network error converting page to PDF: {url}: {e}')
                 finally:
                     await page.close()
-            await extract_text_from_pdf(f'{self.working_folder}/{file_name}')
+            await extract_text_from_pdf(f'{self.working_folder}/{file_name}.pdf')
 
     async def convert_to_pdf(self, content, file_name: str):
         page = await self.new_intercepted_page()
