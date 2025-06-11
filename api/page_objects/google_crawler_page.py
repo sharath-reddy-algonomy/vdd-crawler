@@ -5,14 +5,15 @@ from typing import Set
 from pyppeteer.errors import PageError, TimeoutError, NetworkError
 from pyppeteer_stealth import stealth
 from urllib.request import urlopen
-from api.config import DEFAULT_SEARCH_ENGINE_URL, REGULATORY_DATABASE_SEARCH_ENGINE_URL
+from api.config import DEFAULT_SEARCH_ENGINE_URL, PACKETSTREAM_PROXY_URL
+from pyppeteer import launch
 import os
 import asyncio
 import logging
 
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("crawler")
-
 
 async def extract_urls(page) -> Set[str]:
     try:
@@ -39,6 +40,27 @@ async def has_results(page):
     result = await page.evaluate('(element) => element.textContent', ele)
     return len(result.strip()) != 0
 
+def handle_request(request):
+    asyncio.create_task (intercept_request(request))
+
+async def intercept_request (request):
+    blocked_resource_types = [
+        'beacon',
+        'csp_report',
+        'font',
+        'image',
+        'imageset',
+        'media',
+        'object',
+        'texttrack',
+        'stylesheet',
+    ]
+    if request.resourceType in blocked_resource_types:
+        logger.info (f'Blocked type: {request.resourceType}, url: {request.url}')
+        await request.abort()
+    else:
+        await request.continue_()
+
 
 async def extract_text_from_pdf(pdf_path: str):
     try:
@@ -53,32 +75,51 @@ async def extract_text_from_pdf(pdf_path: str):
         logger.error(f"Error extracting text from {pdf_path}: {e}")
 
 
-async def _retry_navigation(page, url, retries=3, timeout=300000):
-    for attempt in range(retries):
-        try:
-            await page.goto(url, {'waitUntil': 'networkidle0', 'timeout': timeout})
-            await page.waitForSelector('body')
-            return
-        except TimeoutError as e:
-            if attempt == retries - 1:
-                raise e
-            logger.error(f'Timeout loading {url}.Retrying...Attempt{attempt + 1}')
-        except PageError as e:
-            if attempt == retries - 1:
-                raise e
-            logger.error(f'Network Error loading {url}.Retrying...Attempt{attempt + 1}')
-
-
 class CrawlerPage:
 
-    def __init__(self, browser, working_folder):
+    def __init__(self, working_folder):
         self.page_number = None
-        self.browser = browser
+        self._browser_with_proxy = None
+        self._browser = None
         self.working_folder = working_folder
         os.makedirs(self.working_folder, exist_ok=True)
 
+    async def get_browser_with_proxy(self):
+        if self._browser_with_proxy is None:
+            self._browser_with_proxy = await launch({
+                'executablePath': '/usr/bin/chromium',
+                'headless': True,
+                'ignoreHTTPSErrors': True,
+                'args': ['--no-sandbox', '--disable-dev-shm-usage', f'--proxy-server={PACKETSTREAM_PROXY_URL}', '--ignore-certificate-errors'],
+            })
+        return self._browser_with_proxy
+
+    async def new_intercepted_page(self):
+        browser = await self.get_browser_with_proxy()
+        page = await browser.newPage()
+        await page.setRequestInterception(True)
+        page.on('request', handle_request)
+        await page.authenticate({"username":"hnsreddy", "password":"iR2zz4HSqjDVyQdS"})
+        return page
+
+    async def get_browser(self):
+        if self._browser is None:
+            self._browser = await launch({
+                'executablePath': '/usr/bin/chromium',
+                'headless': True,
+                'ignoreHTTPSErrors': True,
+                'args': ['--no-sandbox', '--disable-dev-shm-usage','--ignore-certificate-errors'],
+            })
+        return self._browser
+
+    async def new_page(self):
+        browser = await self.get_browser()
+        page = await browser.newPage()
+        return page
+
+
     async def perform_google_search(self, search_term: str, search_url=DEFAULT_SEARCH_ENGINE_URL):
-        page = await self.browser.newPage()
+        page = await self.new_intercepted_page()
         await stealth(page)
         try:
             await page.goto(DEFAULT_SEARCH_ENGINE_URL)
@@ -90,17 +131,11 @@ class CrawlerPage:
             await page.pdf(path=pdf_path)
         except TimeoutError as te:
             logger.error(f'Timeout error occurred while performing search: {te}')
+            pdf_path = self.working_folder + '/google_error.pdf'
+            await page.pdf(path=pdf_path)
             return None
 
         self.page_number = 1
-        return page
-
-    async def google_site_search(self, search_term: str):
-        page = await self.browser.newPage()
-        await stealth(page)
-        await page.goto(REGULATORY_DATABASE_SEARCH_ENGINE_URL)
-        await page.type('input[name="search"]', search_term)
-        await page.keyboard.press('Enter')
         return page
 
     async def navigate_to_next_page(self, page):
@@ -125,7 +160,7 @@ class CrawlerPage:
             return page
 
     async def write_pdf_file(self, url, file_name):
-        file_path = f'{self.working_folder}/{file_name}'
+        file_path = f'{self.working_folder}/{file_name}.pdf'
         try:
             pdf_content = urlopen(url)
             with open(file_path, 'wb') as f:
@@ -142,13 +177,13 @@ class CrawlerPage:
                 logger.info(f'Downloaded PDF: {url} to {file_name}')
             else:
                 logger.info(f'Converting page: {url} to PDF {file_name}')
-                page = await self.browser.newPage()
+                page = await self.new_page()
                 await stealth(page)
                 try:
                     await page.goto(url)
-                    pdf_path = os.path.join(self.working_folder, file_name)
+                    pdf_path = os.path.join(self.working_folder, f'{file_name}.pdf')
                     await page.pdf(path=pdf_path)
-                    logger.info(f'Converted: {url} to PDF {file_name}')
+                    logger.info(f'Converted: {url} to PDF {file_name}.pdf')
                 except TimeoutError as e:
                     logger.error('Page either too large or is taking too long to load, skipping')
                 except PageError as e:
@@ -160,7 +195,7 @@ class CrawlerPage:
             await extract_text_from_pdf(f'{self.working_folder}/{file_name}')
 
     async def convert_to_pdf(self, content, file_name: str):
-        page = await self.browser.newPage()
+        page = await self.new_intercepted_page()
         await page.setContent(content)
         await page.content()
         await page.screenshot(options={'path': file_name})
@@ -168,5 +203,6 @@ class CrawlerPage:
         await page.pdf(path=pdf_path, format='A4')
         await page.close()
 
-    async def close(self):
-        await self.browser.close()
+    def __del__(self):
+        if self._browser_with_proxy is not None:
+            self._browser_with_proxy.close()

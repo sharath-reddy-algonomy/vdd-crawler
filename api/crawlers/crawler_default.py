@@ -1,6 +1,3 @@
-import uuid
-
-from pyppeteer import launch
 from typing import Set
 from api.config import REGULATORY_DATABASE_SEARCH_ENGINE_URL, DEFAULT_SEARCH_ENGINE_URL
 from api.handlers.s3_handler import upload_files_to_s3
@@ -16,7 +13,7 @@ async def perform_due_diligence(actor_name, schedule_id: str, pages: int = 3):
     logger.info(
         f"Processing perform_applicable_searches for vendor: {actor_name}, schedule: {schedule_id} for {pages} page(s)")
     logger.info(f"Performing generic google search using English search terms for {actor_name}...")
-    search_term = (f'"{actor_name}" & AND ("facilitation payment" | litigation | judicial | fine | launder | OFAC | '
+    search_term = (f'"{actor_name}" AND ("facilitation payment" | litigation | judicial | fine | launder | OFAC | '
                    f'terror | manipulate | counterfeit | traffic | court | appeal | investigate | guilty | illegal | '
                    f'arrest | evasion | sentence | kickback | prison | jail | corruption | corrupt | "grease payment" '
                    f'| crime | bribe | fraud | condemn | accuse | implicate)')
@@ -48,16 +45,7 @@ async def google_search_and_download(
     logger.info("Beginning default search engine search...")
     dir_path = f'./tmp/{category}'
     os.makedirs(dir_path, exist_ok=True)
-
-    logger.info('Launching Browser...')
-    #browser = await launch(headless=True, args=['--no-sandbox', '--disable-gpu'])
-    #browser = await launch(headless=False, args=['--no-sandbox'])
-    browser = await launch ({
-        'executablePath': '/usr/bin/chromium',
-        'headless': True,
-        'args': ['--no-sandbox', '--disable-dev-shm-usage'],
-    })
-    crawler = CrawlerPage(browser, working_folder=dir_path)
+    crawler = CrawlerPage(working_folder=dir_path)
     search_page_urls = set()
 
     try:
@@ -82,11 +70,9 @@ async def google_search_and_download(
     logger.info("Preparing manifest...")
     manifest_map = await create_manifest_for_urls(search_page_urls, category)
     logger.info("Manifest created")
-    logger.info("System attempting to crete PDF and TXT files out of the extracted URLs, this may take a while...")
+    logger.info("System attempting to create PDF and TXT files out of the extracted URLs, this may take a while...")
     await crawler.prepare_pdfs(manifest_map)
     logger.info("PDF and TXT extraction complete.")
-    await browser.close()
-
 
 async def google_site_search_and_download(search_term: str, pages, category: str):
     await google_search_and_download(search_term, pages, category, search_url=REGULATORY_DATABASE_SEARCH_ENGINE_URL)
@@ -98,7 +84,7 @@ async def create_manifest_for_urls(urls: Set, category: str):
     with open(manifest_file_path, 'w') as manifest_file:
         file_number = 1
         for url in urls:
-            manifest_map[url] = f"{file_number}.pdf"
+            manifest_map[url] = f"{file_number}"
             manifest_file.write(f"{file_number} -> {url}\n")
             file_number += 1
     return manifest_map
