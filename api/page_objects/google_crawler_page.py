@@ -5,7 +5,7 @@ from typing import Set
 from pyppeteer.errors import PageError, TimeoutError, NetworkError
 from pyppeteer_stealth import stealth
 from urllib.request import urlopen
-from api.config import DEFAULT_SEARCH_ENGINE_URL, PACKETSTREAM_PROXY_URL
+from api.config import DEFAULT_SEARCH_ENGINE_URL, PACKETSTREAM_PROXY_URL, PACKETSTREAM_USERNAME, PACKETSTREAM_PASSWORD
 from pyppeteer import launch
 import os
 import asyncio
@@ -75,9 +75,21 @@ async def extract_text_from_pdf(pdf_path: str):
         logger.error(f"Error extracting text from {pdf_path}: {e}")
 
 
+async def create_manifest_for_urls(urls: Set, category: str):
+    manifest_file_path = os.path.join('./tmp', category, 'manifest.txt')
+    manifest_map = {}
+    with open(manifest_file_path, 'w') as manifest_file:
+        file_number = 1
+        for url in urls:
+            manifest_map[url] = f"{file_number}"
+            manifest_file.write(f"{file_number} -> {url}\n")
+            file_number += 1
+    return manifest_map
+
+
 class CrawlerPage:
 
-    def __init__(self, working_folder):
+    def __init__(self, working_folder='./tmp'):
         self.page_number = None
         self._browser_with_proxy = None
         self._browser = None
@@ -99,7 +111,7 @@ class CrawlerPage:
         page = await browser.newPage()
         await page.setRequestInterception(True)
         page.on('request', handle_request)
-        await page.authenticate({"username":"hnsreddy", "password":"iR2zz4HSqjDVyQdS"})
+        await page.authenticate({"username":f"{PACKETSTREAM_USERNAME}", "password":f"{PACKETSTREAM_PASSWORD}"})
         return page
 
     async def get_browser(self):
@@ -122,7 +134,7 @@ class CrawlerPage:
         page = await self.new_intercepted_page()
         await stealth(page)
         try:
-            await page.goto(DEFAULT_SEARCH_ENGINE_URL)
+            await page.goto(search_url)
             await page.type('input[name="search"]', search_term)
             await page.keyboard.press('Enter')
             await page.waitForSelector('div[id="resInfo-0"]')
@@ -203,6 +215,43 @@ class CrawlerPage:
         await page.pdf(path=pdf_path, format='A4')
         await page.close()
 
+    async def search_and_download(self, search_term: str,
+        num_of_results_pages_to_scrape: int,
+        category: str,
+        search_url=DEFAULT_SEARCH_ENGINE_URL):
+        logger.info("Beginning default search engine search...")
+        dir_path = f'./tmp/{category}'
+        os.makedirs(dir_path, exist_ok=True)
+        search_page_urls = set()
+
+        try:
+            page_number = 1
+            search_page = None
+            while page_number <= num_of_results_pages_to_scrape:
+                if page_number == 1:
+                    logger.info(f'Using search term: {search_term}')
+                    search_page = await self.perform_google_search(search_term, search_url=search_url)
+                elif await can_paginate(search_page):
+                    logger.info('Navigating to next page...')
+                    search_page = await self.navigate_to_next_page(search_page)
+                else:
+                    break
+
+                search_page_urls.update(await extract_urls(search_page))
+                logger.info(f'Found {len(search_page_urls)} URLs')
+                page_number += 1
+            logger.info(f"Completed performing search against default search engine.")
+        except Exception as e:
+            logger.error(f'Error occurred: {e}')
+        logger.info("Preparing manifest...")
+        manifest_map = await create_manifest_for_urls(search_page_urls, category)
+        logger.info("Manifest created")
+        logger.info("System attempting to create PDF and TXT files out of the extracted URLs, this may take a while...")
+        await self.prepare_pdfs(manifest_map)
+        logger.info("PDF and TXT extraction complete.")
+
     def __del__(self):
         if self._browser_with_proxy is not None:
             self._browser_with_proxy.close()
+        if self._browser is not None:
+            self._browser.close()
