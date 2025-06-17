@@ -64,21 +64,25 @@ awslocal s3api create-bucket --bucket vdd-bucket
 ```
 
 ### Build and Run crawler app locally
-1. Build docker image
+1. Create a docker network for VDD. Note that this command needs to be run only once and not everytime you build docker image.
+```commandline
+docker network create vdd-network -d bridge
+```
+2. Build docker image
 ```commandline
 docker build --file Dockerfile-0 -t vdd-crawler .
 ```
-2. Run docker for API (will start a FASTApi server)
+3. Run docker for API (will start a FASTApi server)
 ```commandline
-docker run --env-file .env vdd-crawler:latest api
+docker run --env-file .env.example --network vdd-network vdd-crawler:latest api
 ```
-3. In another terminal run `listener`
+4. In another terminal run `listener`
 ```commandline
-docker run --env-file .env vdd-crawler:latest listener
+docker run --env-file .env.example --network vdd-network vdd-crawler:latest listener
 ```
-4. In any browser open URL `http://localhost:8080/docs`. This should load Swagger UI.
-5. Try out the `/crawler/due-diligence` API with relevant request body.
-6. Once you hit the `Execute` button in Swagger, you should see that the listener will start crawling for the vendor specified.
+5. In any browser open URL `http://localhost:8080/docs`. This should load Swagger UI.
+6. Try out the `/crawler/due-diligence` API with relevant request body.
+7. Once you hit the `Execute` button in Swagger, you should see that the listener will start crawling for the vendor specified.
 
 ### AWS Setup
 ```commandline
