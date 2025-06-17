@@ -6,8 +6,8 @@ import time
 
 sys.path.append("/app")
 
-from api.config import REGION_NAME, SQS_QUEUE_NAME, MSG_PUBLISHER
-from api.crawlers.crawler_default import google_search_and_download, perform_due_diligence
+from api.config import REGION_NAME, SQS_QUEUE_NAME
+from api.crawlers.crawler_orchestrator import perform_due_diligence_v2
 
 
 def schedule_run(topic_arn, message, subject=None):
@@ -72,7 +72,7 @@ async def listen_to_s3_notifications():
                         print(f"Message ID {msg_id}")
                         if msg_id and vendor_name:
                             print(f"Schedule Code should be implemented for {msg_id}")
-                            await perform_due_diligence(actor_name=vendor_name, schedule_id=msg_id, pages=pages)
+                            await perform_due_diligence_v2(body)
                         else:
                             print(f"Could not find required info (vendor, schedule id) from the message")
                     elif subject == "Amazon S3 Notification":

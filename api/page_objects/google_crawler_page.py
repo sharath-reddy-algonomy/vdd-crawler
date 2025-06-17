@@ -87,14 +87,22 @@ async def create_manifest_for_urls(urls: Set, category: str):
     return manifest_map
 
 
+async def write_pdf_file(url, file_path):
+    try:
+        pdf_content = urlopen(url)
+        with open(file_path, 'wb') as f:
+            f.write(pdf_content.read())
+        logger.info(f'Converted page: {url} to PDF {file_path}')
+    except Exception as e:
+        logger.error(f'Error writing PDF file {file_path}: {e}')
+
+
 class CrawlerPage:
 
-    def __init__(self, working_folder='./tmp'):
+    def __init__(self):
         self.page_number = None
         self._browser_with_proxy = None
         self._browser = None
-        self.working_folder = working_folder
-        os.makedirs(self.working_folder, exist_ok=True)
 
     async def get_browser_with_proxy(self):
         if self._browser_with_proxy is None:
@@ -130,7 +138,7 @@ class CrawlerPage:
         return page
 
 
-    async def perform_google_search(self, search_term: str, search_url=DEFAULT_SEARCH_ENGINE_URL):
+    async def perform_google_search(self, search_term: str, working_dir, search_url=DEFAULT_SEARCH_ENGINE_URL):
         page = await self.new_intercepted_page()
         await stealth(page)
         try:
@@ -139,18 +147,18 @@ class CrawlerPage:
             await page.keyboard.press('Enter')
             await page.waitForSelector('div[id="resInfo-0"]')
 
-            pdf_path = self.working_folder + '/google_results.pdf'
+            pdf_path = working_dir + '/google_results.pdf'
             await page.pdf(path=pdf_path)
         except TimeoutError as te:
             logger.error(f'Timeout error occurred while performing search: {te}')
-            pdf_path = self.working_folder + '/google_error.pdf'
+            pdf_path = working_dir + '/google_error.pdf'
             await page.pdf(path=pdf_path)
             return None
 
         self.page_number = 1
         return page
 
-    async def navigate_to_next_page(self, page):
+    async def navigate_to_next_page(self, page, working_dir):
         try:
             self.page_number += 1
             logger.info(f'Navigating to page {self.page_number}')
@@ -161,7 +169,7 @@ class CrawlerPage:
                 page.click(page_selector),
             )
             await page.waitForSelector(page_selector_to_check)
-            pdf_path = self.working_folder + f'/google_results_{self.page_number}.pdf'
+            pdf_path = working_dir + f'/google_results_{self.page_number}.pdf'
             await page.pdf(path=pdf_path)
 
             return page
@@ -171,21 +179,12 @@ class CrawlerPage:
             logger.error(f'Error navigating to next page: {e}')
             return page
 
-    async def write_pdf_file(self, url, file_name):
-        file_path = f'{self.working_folder}/{file_name}.pdf'
-        try:
-            pdf_content = urlopen(url)
-            with open(file_path, 'wb') as f:
-                f.write(pdf_content.read())
-            logger.info(f'Converted page: {url} to PDF {file_name}')
-        except Exception as e:
-            logger.error(f'Error writing PDF file {file_name}: {e}')
-
-    async def prepare_pdfs(self, urls_manifest: Dict):
+    async def prepare_pdfs(self, urls_manifest: Dict, working_dir):
         for url, file_name in urls_manifest.items():
+            file_path = f"{working_dir}/{file_name}.pdf"
             if url.lower().endswith('.pdf'):
                 logger.info(f'Downloading PDF: {url} to {file_name}')
-                await self.write_pdf_file(url, file_name)
+                await write_pdf_file(url, file_path)
                 logger.info(f'Downloaded PDF: {url} to {file_name}')
             else:
                 logger.info(f'Converting page: {url} to PDF {file_name}')
@@ -193,7 +192,7 @@ class CrawlerPage:
                 await stealth(page)
                 try:
                     await page.goto(url)
-                    pdf_path = os.path.join(self.working_folder, f'{file_name}.pdf')
+                    pdf_path = os.path.join(working_dir, f'{file_name}.pdf')
                     await page.pdf(path=pdf_path)
                     logger.info(f'Converted: {url} to PDF {file_name}.pdf')
                 except TimeoutError as e:
@@ -204,7 +203,7 @@ class CrawlerPage:
                     logger.error(f'Network error converting page to PDF: {url}: {e}')
                 finally:
                     await page.close()
-            await extract_text_from_pdf(f'{self.working_folder}/{file_name}.pdf')
+            await extract_text_from_pdf(file_path)
 
     async def convert_to_pdf(self, content, file_name: str):
         page = await self.new_intercepted_page()
@@ -219,7 +218,7 @@ class CrawlerPage:
         num_of_results_pages_to_scrape: int,
         category: str,
         search_url=DEFAULT_SEARCH_ENGINE_URL):
-        logger.info("Beginning default search engine search...")
+
         dir_path = f'./tmp/{category}'
         os.makedirs(dir_path, exist_ok=True)
         search_page_urls = set()
@@ -230,24 +229,23 @@ class CrawlerPage:
             while page_number <= num_of_results_pages_to_scrape:
                 if page_number == 1:
                     logger.info(f'Using search term: {search_term}')
-                    search_page = await self.perform_google_search(search_term, search_url=search_url)
+                    search_page = await self.perform_google_search(search_term, dir_path, search_url=search_url)
                 elif await can_paginate(search_page):
                     logger.info('Navigating to next page...')
-                    search_page = await self.navigate_to_next_page(search_page)
+                    search_page = await self.navigate_to_next_page(search_page, dir_path)
                 else:
                     break
 
                 search_page_urls.update(await extract_urls(search_page))
                 logger.info(f'Found {len(search_page_urls)} URLs')
                 page_number += 1
-            logger.info(f"Completed performing search against default search engine.")
         except Exception as e:
             logger.error(f'Error occurred: {e}')
         logger.info("Preparing manifest...")
         manifest_map = await create_manifest_for_urls(search_page_urls, category)
         logger.info("Manifest created")
         logger.info("System attempting to create PDF and TXT files out of the extracted URLs, this may take a while...")
-        await self.prepare_pdfs(manifest_map)
+        await self.prepare_pdfs(manifest_map, dir_path)
         logger.info("PDF and TXT extraction complete.")
 
     def __del__(self):

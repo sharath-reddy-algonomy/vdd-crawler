@@ -20,6 +20,7 @@ class CreateDueDiligenceArtifactsRequest(BaseModel):
     directors: List[str] | None
     pages: int
     schedule_id: str | None
+    website_url: str | None
     crawlers: List[ALLOWED_CRAWLERS]
 
 
@@ -43,7 +44,7 @@ def hello():
                      - `directors` - optional; list of names of directors of a company/vendor 
                      - `pages` - number of google search results pages to crawl  
                      - `crawlers` - list of allowed crawlers supported by the system; 
-                                    one of: `GOOGLE, NEWS, REGULATORY_DATABASES,OFFICIAL_WEBSITE` 
+                                    `GOOGLE, NEWS, REGULATORY_DATABASES,OFFICIAL_WEBSITE` 
                      """)
 async def create_vendor_artifacts(due_diligence_request: CreateDueDiligenceArtifactsRequest):
     if not due_diligence_request.schedule_id:
@@ -53,6 +54,7 @@ async def create_vendor_artifacts(due_diligence_request: CreateDueDiligenceArtif
         "schedule_id": due_diligence_request.schedule_id,
         "directors": due_diligence_request.directors,
         "pages": due_diligence_request.pages,
+        "website_url": due_diligence_request.website_url,
         "crawlers": due_diligence_request.crawlers,
     }), f"Scheduling {due_diligence_request.schedule_id}!")
     return {

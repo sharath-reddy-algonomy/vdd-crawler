@@ -6,7 +6,7 @@ import asyncio
 sys.path.append("/app")
 
 from api.config import REGION_NAME, MSG_PUBLISHER, USE_LOCALSTACK, SQS_QUEUE_NAME, LOCAL_AWS_ENDPOINT_URL
-from api.crawlers.crawler_default import perform_due_diligence
+from api.crawlers.crawler_orchestrator import perform_due_diligence_v2
 
 sqs = boto3.client(
     "sqs",
@@ -52,12 +52,19 @@ async def process_message(message_body, message_id):
         vendor_name = payload["vendor_name"]
         schedule_id = payload["schedule_id"]
         pages = payload["pages"]
+        directors = payload["directors"]
+        website_url = payload["website_url"]
+        crawlers = payload["crawlers"]
+
 
         print(f"Received message with ID {message_id} for vendor: {vendor_name}", flush=True)
         print(f"Schedule ID: {schedule_id}", flush=True)
         print(f"Pages to process: {pages}", flush=True)
+        print(f"Directors for {vendor_name}: {directors}", flush=True)
+        print(f"Website URL of {vendor_name}: {website_url}", flush=True)
+        print(f"Crawlers chosen: {crawlers}", flush=True)
 
-        await perform_due_diligence(vendor_name, schedule_id, pages)
+        await perform_due_diligence_v2(payload)
         print(f"Completed processing message with ID {message_id}.", flush=True)
 
     except Exception as e:
