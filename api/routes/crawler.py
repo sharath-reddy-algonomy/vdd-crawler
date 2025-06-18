@@ -1,10 +1,10 @@
 import json
 import uuid
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from fastapi import APIRouter
 from fastapi.responses import RedirectResponse
-from typing import List, Literal
+from typing import List, Literal, Optional, Any, Self
 
 from api.handlers.web_event_handler import schedule_run
 
@@ -17,12 +17,11 @@ ALLOWED_CRAWLERS = Literal["GOOGLE", "NEWS", "REGULATORY_DATABASES", "OFFICIAL_W
 
 class CreateDueDiligenceArtifactsRequest(BaseModel):
     vendor_name: str
-    directors: List[str] | None
-    pages: int
-    schedule_id: str | None
-    website_url: str | None
     crawlers: List[ALLOWED_CRAWLERS]
-
+    pages: int = 2
+    schedule_id: str = None
+    website_url: str = None
+    directors: List[str] = []
 
 @crawler_router.get("", include_in_schema=False)
 def hello():
@@ -45,6 +44,7 @@ def hello():
                      - `pages` - number of google search results pages to crawl  
                      - `crawlers` - list of allowed crawlers supported by the system; 
                                     `GOOGLE, NEWS, REGULATORY_DATABASES,OFFICIAL_WEBSITE` 
+                     - `website_url` - website URL of the vendor for official websites search.
                      """)
 async def create_vendor_artifacts(due_diligence_request: CreateDueDiligenceArtifactsRequest):
     if not due_diligence_request.schedule_id:
