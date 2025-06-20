@@ -12,3 +12,4 @@ botocore
 pytest
 python-dotenv
 PyMuPDF
+stopit
