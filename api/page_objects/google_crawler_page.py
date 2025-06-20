@@ -152,6 +152,8 @@ class CrawlerPage:
         await stealth(page)
         try:
             await page.goto(search_url)
+            debug_pdf_path = f"{working_dir}/google_search_page.pdf"
+            await page.pdf(path=debug_pdf_path)
             await page.type('input[name="search"]', search_term)
             await page.keyboard.press('Enter')
             await page.waitForSelector('div[id="resInfo-0"]')
