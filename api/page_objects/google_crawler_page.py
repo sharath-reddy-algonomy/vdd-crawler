@@ -1,4 +1,5 @@
 import fitz
+import stopit
 from bs4 import BeautifulSoup
 from typing import Dict
 from typing import Set
@@ -7,7 +8,8 @@ from pyppeteer_stealth import stealth
 from urllib.request import urlopen
 from api.config import DEFAULT_SEARCH_ENGINE_URL, PACKETSTREAM_PROXY_URL, PACKETSTREAM_USERNAME, PACKETSTREAM_PASSWORD
 from pyppeteer import launch
-import os
+from stopit import threading_timeoutable as timeoutable, TimeoutException as ForcedTimeoutError
+from os import path, makedirs
 import asyncio
 import logging
 
@@ -65,7 +67,7 @@ async def intercept_request (request):
 async def extract_text_from_pdf(pdf_path: str):
     try:
         doc = fitz.open(pdf_path)
-        text_file_path = os.path.splitext(pdf_path)[0] + '.txt'
+        text_file_path = path.splitext(pdf_path)[0] + '.txt'
         with open(text_file_path, 'w') as text_file:
             for page_num in range(doc.page_count):
                 page = doc.load_page(page_num)
@@ -76,7 +78,7 @@ async def extract_text_from_pdf(pdf_path: str):
 
 
 async def create_manifest_for_urls(urls: Set, category: str):
-    manifest_file_path = os.path.join('./tmp', category, 'manifest.txt')
+    manifest_file_path = path.join('./tmp', category, 'manifest.txt')
     manifest_map = {}
     with open(manifest_file_path, 'w') as manifest_file:
         file_number = 1
@@ -86,7 +88,7 @@ async def create_manifest_for_urls(urls: Set, category: str):
             file_number += 1
     return manifest_map
 
-
+@timeoutable(default='timedout')
 async def write_pdf_file(url, file_path):
     try:
         pdf_content = urlopen(url)
@@ -95,6 +97,13 @@ async def write_pdf_file(url, file_path):
         logger.info(f'Converted page: {url} to PDF {file_path}')
     except Exception as e:
         logger.error(f'Error writing PDF file {file_path}: {e}')
+
+
+@timeoutable(default='timedout')
+async def to_pdf(page, url, pdf_path):
+    await page.goto(url, options={'timeout':10000})
+    await page.pdf(path=pdf_path)
+    logger.info(f'Converted: {url} to PDF {pdf_path}')
 
 
 class CrawlerPage:
@@ -184,19 +193,19 @@ class CrawlerPage:
             file_path = f"{working_dir}/{file_name}.pdf"
             if url.lower().endswith('.pdf'):
                 logger.info(f'Downloading PDF: {url} to {file_name}')
-                await write_pdf_file(url, file_path)
-                logger.info(f'Downloaded PDF: {url} to {file_name}')
+                await write_pdf_file(url, file_path, timeout=10)
+                logger.info(f'Downloaded PDF: {url} to {file_path}')
             else:
                 logger.info(f'Converting page: {url} to PDF {file_name}')
                 page = await self.new_page()
                 await stealth(page)
                 try:
-                    await page.goto(url)
-                    pdf_path = os.path.join(working_dir, f'{file_name}.pdf')
-                    await page.pdf(path=pdf_path)
-                    logger.info(f'Converted: {url} to PDF {file_name}.pdf')
+                    pdf_path = path.join(working_dir, f'{file_name}.pdf')
+                    await to_pdf(page, url, pdf_path, timeout=10)
                 except TimeoutError as e:
-                    logger.error('Page either too large or is taking too long to load, skipping')
+                    logger.error('Navigation timeout exceeded. Skipping.')
+                except ForcedTimeoutError as e:
+                    logger.error('Page either too large or is taking too long to load. Skipping')
                 except PageError as e:
                     logger.error(f'Page error converting page to PDF: {url}: {e}')
                 except NetworkError as e:
@@ -210,7 +219,7 @@ class CrawlerPage:
         await page.setContent(content)
         await page.content()
         await page.screenshot(options={'path': file_name})
-        pdf_path = os.path.join("./tmp", file_name)
+        pdf_path = path.join("./tmp", file_name)
         await page.pdf(path=pdf_path, format='A4')
         await page.close()
 
@@ -220,7 +229,7 @@ class CrawlerPage:
         search_url=DEFAULT_SEARCH_ENGINE_URL):
 
         dir_path = f'./tmp/{category}'
-        os.makedirs(dir_path, exist_ok=True)
+        makedirs(dir_path, exist_ok=True)
         search_page_urls = set()
 
         try:
