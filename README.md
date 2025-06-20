@@ -29,6 +29,7 @@ MSG_CONSUMER=arn:aws:sqs:us-east-1:000000000000:vdd-queue
 S3_QUEUE_NAME=vdd-queue
 DEFAULT_GOOGLE_SEARCH_ENGINE_URL=https://cse.google.com/cse?cx=30ed94f37199f4ea8
 REGULATORY_DATABASE_GOOGLE_SEARCH_ENGINE_URL=https://cse.google.com/cse?cx=d665f5ed70d3243dc
+NEWS_SEARCH_ENGINE_URL=https://cse.google.com/cse?cx=30ed94f37199f4ea8
 ENDPOINT_URL=http://host.docker.internal:4566
 ```
 ### Local Sandbox Setup
