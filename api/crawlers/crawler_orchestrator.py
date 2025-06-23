@@ -8,8 +8,6 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("crawler")
 
-def handle_cleanup_exception(fn, path, exception_info):
-    logger.info('Error while cleaning up local filesystem', exception_info)
 
 async def perform_due_diligence_v2(json_payload):
     vendor_name = json_payload["vendor_name"]
@@ -37,10 +35,10 @@ async def perform_due_diligence_v2(json_payload):
     logger.info("Uploading files to S3...")
     await upload_files_to_s3(os.environ.get('BUCKET_NAME', "vdd-crawler"), schedule_id)
     logger.info("Upload to S3 complete")
-    logger.info("Cleaning up local file system")
+    #logger.info("Cleaning up local file system")
     #shutil.rmtree(f"./tmp/{schedule_id}", onexc=handle_cleanup_exception)
     #Test after demo
-    logger.info(f"All done for {schedule_id}.")
+    #logger.info(f"All done for {schedule_id}.")
 
 
 
