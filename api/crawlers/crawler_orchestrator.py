@@ -1,5 +1,3 @@
-import shutil
-
 from api.handlers.s3_handler import upload_files_to_s3
 from api.crawlers.Crawlers import CRAWLER_REGISTRY, BaseCrawler
 import os
