@@ -99,7 +99,13 @@ async def write_pdf_file(url, file_path):
         logger.error(f'Error writing PDF file {file_path}: {e}')
 
 async def to_pdf(page, url, pdf_path):
-    await page.goto(url)
+    logger.info ('Textising the content...')
+    await page.goto('https://www.textise.net/')
+    await page.type('input[name="in"]', url)
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('div[textise="block"]')
+    logger.info('Done textising')
+
     await page.pdf(path=pdf_path)
     logger.info(f'Converted: {url} to PDF {pdf_path}')
 
@@ -209,7 +215,7 @@ class CrawlerPage:
                     await stealth(page)
                     try:
                         pdf_path = path.join(working_dir, f'{file_name}.pdf')
-                        await asyncio.wait_for(to_pdf(page, url, pdf_path), timeout=10)
+                        await asyncio.wait_for(to_pdf(page, url, pdf_path), timeout=60)
                     except ForcedTimeoutError as e:
                         logger.error('Page either too large or is taking too long to load. Skipping')
                     except PageError as e:
