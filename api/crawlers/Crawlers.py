@@ -34,6 +34,9 @@ class BaseCrawler(ABC):
     @abstractmethod
     def get_category(self) -> str:
         pass
+    @abstractmethod
+    def should_crawl_for_director(self):
+        pass
 
 
 class GoogleCrawler(BaseCrawler):
@@ -42,6 +45,9 @@ class GoogleCrawler(BaseCrawler):
 
     def get_search_engine_url(self) -> str:
         return DEFAULT_SEARCH_ENGINE_URL
+
+    def should_crawl_for_director(self):
+        return True
 
     async def crawl(self, actor_name, directors, schedule_id, pages, site_url: None):
         google_page = CrawlerPage()
@@ -57,22 +63,23 @@ class GoogleCrawler(BaseCrawler):
                                               search_url=self.get_search_engine_url())
         logger.info(f"Completed search using Hindi search terms for {actor_name}.")
 
-        for director in directors:
-            logger.info(f"Performing search using English search terms for director {director}...")
-            director_search_term = get_search_term(director)
-            await (google_page.search_and_download(director_search_term,
-                                                   pages,
-                                                   f"{schedule_id}/{self.get_category()}/Directors/{director}",
-                                                   search_url=self.get_search_engine_url()))
-            logger.info(f"Completed search using English search terms for director {director}.")
+        if self.should_crawl_for_director():
+            for director in directors:
+                logger.info(f"Performing search using English search terms for director {director}...")
+                director_search_term = get_search_term(director)
+                await (google_page.search_and_download(director_search_term,
+                                                       pages,
+                                                       f"{schedule_id}/{self.get_category()}/Directors/{director}",
+                                                       search_url=self.get_search_engine_url()))
+                logger.info(f"Completed search using English search terms for director {director}.")
 
-            logger.info(f"Performing search using Hindi search terms for director {director}...")
-            director_hindi_search_term = get_hindi_search_term(director)
-            await google_page.search_and_download(director_hindi_search_term,
-                                                  pages,
-                                                  f"{schedule_id}/{self.get_category()}/Directors/{director}/Hindi",
-                                                  search_url=self.get_search_engine_url())
-            logger.info(f"Completed search using Hindi search terms for director {director}.")
+                logger.info(f"Performing search using Hindi search terms for director {director}...")
+                director_hindi_search_term = get_hindi_search_term(director)
+                await google_page.search_and_download(director_hindi_search_term,
+                                                      pages,
+                                                      f"{schedule_id}/{self.get_category()}/Directors/{director}/Hindi",
+                                                      search_url=self.get_search_engine_url())
+                logger.info(f"Completed search using Hindi search terms for director {director}.")
 
 
 class NewsCrawler(GoogleCrawler):
@@ -82,6 +89,9 @@ class NewsCrawler(GoogleCrawler):
     def get_category(self) -> str:
         return "News"
 
+    def should_crawl_for_director(self):
+        return False
+
 
 class RegulatoryDatabaseCrawler(GoogleCrawler):
     def get_search_engine_url(self) -> str:
@@ -89,6 +99,9 @@ class RegulatoryDatabaseCrawler(GoogleCrawler):
 
     def get_category(self) -> str:
         return "Regulatory Databases"
+
+    def should_crawl_for_director(self):
+        return False
 
 
 class OfficialWebsiteCrawler(BaseCrawler):
@@ -98,6 +111,9 @@ class OfficialWebsiteCrawler(BaseCrawler):
 
     def get_category(self) -> str:
         return "OfficialWebsite"
+
+    def should_crawl_for_director(self):
+        return False
 
     async def crawl(self, actor_name, directors, schedule_id, pages, site_url: None):
         google_page = CrawlerPage()
