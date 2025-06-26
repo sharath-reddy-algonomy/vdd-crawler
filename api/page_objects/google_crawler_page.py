@@ -34,8 +34,8 @@ async def extract_urls(page) -> Set[str]:
 
 
 async def can_paginate(page):
-    ele = await page.xpath('//div[@class="gsc-cursor"]')
-    return len(ele) != 0
+    elements = await page.xpath('//div[@class="gsc-cursor-page"]')
+    return len(elements) > 1
 
 
 async def has_results(page):
@@ -99,7 +99,7 @@ async def write_pdf_file(url, file_path):
     except Exception as e:
         logger.error(f'Error writing PDF file {file_path}: {e}')
 
-async def to_pdf(page, url, pdf_path):
+async def to_textised_pdf(page, url, pdf_path):
     logger.info ('Textising the content...')
     await page.goto('https://www.textise.net/')
     await page.type('input[name="in"]', url)
@@ -110,14 +110,27 @@ async def to_pdf(page, url, pdf_path):
     await page.pdf(path=pdf_path)
     logger.info(f'Converted: {url} to PDF {pdf_path}')
 
+async def to_pdf(page, pdf_path):
+    try:
+        await page.pdf(path=pdf_path)
+    except Exception as e:
+        logger.error(f'Failed creating PDF: {e}')
+
+async def dump_markup(page, dump_path):
+    try:
+        content = await page.content()
+        with open(dump_path, 'w') as f:
+            f.write(content)
+    except Exception as e:
+        logger.info (f'Error dumping markup: {e}')
 
 async def get_browser_with_proxy():
     _browser_with_proxy = await launch({
             'executablePath': '/usr/bin/chromium',
             'headless': True,
             'ignoreHTTPSErrors': True,
-            'args': ['--no-sandbox', '--disable-dev-shm-usage', f'--proxy-server={PACKETSTREAM_PROXY_URL}', '--ignore-certificate-errors'],
-        })
+            'args': ['--no-sandbox', '--disable-dev-shm-usage', f'--proxy-server={PACKETSTREAM_PROXY_URL}', '--ignore-certificate-errors', '--lang=en-IN,en'],
+    })
     return _browser_with_proxy
 
 
@@ -126,15 +139,65 @@ async def get_browser():
             'executablePath': '/usr/bin/chromium',
             'headless': True,
             'ignoreHTTPSErrors': True,
-            'args': ['--no-sandbox', '--disable-dev-shm-usage','--ignore-certificate-errors'],
+            'args': ['--no-sandbox', '--disable-dev-shm-usage','--ignore-certificate-errors', '--lang=en-IN,en'],
         })
     return _browser
 
 
-class CrawlerPage:
+async def perform_google_search(page, search_term: str, working_dir, num_pages_to_crawl, search_url=DEFAULT_SEARCH_ENGINE_URL):
+    search_page_urls = set()
+    await stealth(page)
+    page_number = 1
 
-    def __init__(self):
-        self.page_number = None
+    try:
+        await page.goto(search_url)
+        await page.type('input[name="search"]', search_term)
+        await page.keyboard.press('Enter')
+        await page.waitForSelector('div[id="resInfo-0"]')
+        search_page_urls.update(await extract_urls(page))
+        logger.info(f'Found {len(search_page_urls)} URLs')
+        pdf_path = working_dir + f'/google_results_{page_number}.pdf'
+        await to_pdf(page, pdf_path)
+
+        page_number = 2
+        while page_number <= num_pages_to_crawl:
+            if await can_paginate(page):
+                logger.info(f'Navigating to page {page_number}...')
+                await page.waitForXPath('//div[@class="gsc-cursor-page"][1]')
+                elements_to_click = await page.xpath(f'//div[@role="link"][{page_number - 1}]')
+                logger.info(f'Element to click identified: {elements_to_click[0]}')
+                try:
+                    await asyncio.gather(
+                        page.waitForNavigation(),
+                        elements_to_click[0].click()
+                    )
+                except TimeoutError as e:
+                    logger.info(f'Timed-out waiting to confirm, proceeding without confirmation: {e}')
+                    await dump_markup(page, f'{working_dir}/markup_dump_timeout.html')
+                except Exception as e:
+                    logger.info(f'Error occurred navigating: {e}')
+                    await dump_markup(page, f'{working_dir}/markup_dump_error.html')
+                    await to_pdf(page, f'{working_dir}/google_navigation_error.pdf')
+
+                search_page_urls.update(await extract_urls(page))
+                logger.info(f'Found {len(search_page_urls)} URLs')
+                logger.info('Generating google search results PDF...')
+                pdf_path = working_dir + f'/google_results_{page_number}.pdf'
+                await to_pdf(page, pdf_path)
+                logger.info('PDF Generated')
+                page_number += 1
+            else:
+                break
+    except TimeoutError as te:
+        logger.error(f'Timeout error occurred while performing search: {te}')
+        pdf_path = working_dir + '/google_error.pdf'
+        await to_pdf(page, pdf_path)
+    except Exception as e:
+        logger.error(f'Error occurred searching Google: {e}')
+    return search_page_urls
+
+
+class CrawlerPage:
 
     @asynccontextmanager
     async def new_intercepted_page(self):
@@ -160,57 +223,6 @@ class CrawlerPage:
             except Exception as e:
                 logger.info('Error while closing browser.', e)
 
-
-    async def perform_google_search(self, page, search_term: str, working_dir, search_url=DEFAULT_SEARCH_ENGINE_URL):
-        await stealth(page)
-        try:
-            await page.goto(search_url)
-            debug_pdf_path = f"{working_dir}/google_search_page.pdf"
-            await page.pdf(path=debug_pdf_path)
-            await page.type('input[name="search"]', search_term)
-            await page.keyboard.press('Enter')
-            await page.waitForSelector('div[id="resInfo-0"]')
-
-            pdf_path = working_dir + '/google_results.pdf'
-            await page.pdf(path=pdf_path)
-
-        except TimeoutError as te:
-            logger.error(f'Timeout error occurred while performing search: {te}')
-            pdf_path = working_dir + '/google_error.pdf'
-            await page.pdf(path=pdf_path)
-
-        self.page_number = 1
-        return page
-
-    async def navigate_to_next_page(self, page, working_dir):
-        try:
-            self.page_number += 1
-            logger.info(f'Navigating to page {self.page_number}')
-            page_selector = f'div[aria-label="Page {self.page_number}"]'
-            page_selector_to_check = f'div[aria-label="Page {self.page_number - 1}"]'
-            await page.waitForSelector(page_selector)
-            try:
-                await asyncio.gather(
-                    page.waitForNavigation({'timeout':60000}),
-                    page.click(page_selector),
-                )
-            except TimeoutError as e:
-                logger.info('Timed-out waiting to confirm, proceeding without confirmation.')
-
-            await page.waitForSelector(page_selector_to_check)
-            logger.info('Generating google search results PDF...')
-            pdf_path = working_dir + f'/google_results_{self.page_number}.pdf'
-            await page.pdf(path=pdf_path)
-            logger.info('PDF Generated')
-
-            return page
-        except TimeoutError as e:
-            logger.error('Timed-out navigating to the next page.')
-            return page
-        except Exception as e:
-            logger.error(f'Error navigating to next page: {e}')
-            return page
-
     async def prepare_pdfs(self, urls_manifest: Dict, working_dir):
         for url, file_name in urls_manifest.items():
             file_path = f"{working_dir}/{file_name}.pdf"
@@ -224,7 +236,7 @@ class CrawlerPage:
                     await stealth(page)
                     try:
                         pdf_path = path.join(working_dir, f'{file_name}.pdf')
-                        await asyncio.wait_for(to_pdf(page, url, pdf_path), timeout=90)
+                        await asyncio.wait_for(to_textised_pdf(page, url, pdf_path), timeout=90)
                     except ForcedTimeoutError as e:
                         logger.error('Page either too large or is taking too long to load. Skipping')
                     except PageError as e:
@@ -241,29 +253,17 @@ class CrawlerPage:
 
         dir_path = f'./tmp/{category}'
         makedirs(dir_path, exist_ok=True)
-        search_page_urls = set()
-        async with self.new_intercepted_page() as page:
-            try:
-                page_number = 1
-                search_page = None
-                while page_number <= num_of_results_pages_to_scrape:
-                    if page_number == 1:
-                        logger.info(f'Using search term: {search_term}')
-                        search_page = await self.perform_google_search(page, search_term, dir_path, search_url=search_url)
-                    elif await can_paginate(search_page):
-                        logger.info('Navigating to next page...')
-                        search_page = await self.navigate_to_next_page(search_page, dir_path)
-                    else:
-                        break
 
-                    search_page_urls.update(await extract_urls(search_page))
-                    logger.info(f'Found {len(search_page_urls)} URLs')
-                    page_number += 1
-            except Exception as e:
-                logger.error(f'Error occurred: {e}')
-        logger.info("Preparing manifest...")
-        manifest_map = await create_manifest_for_urls(search_page_urls, category)
-        logger.info("Manifest created")
-        logger.info("System attempting to create PDF and TXT files out of the extracted URLs, this may take a while...")
-        await self.prepare_pdfs(manifest_map, dir_path)
-        logger.info("PDF and TXT extraction complete.")
+        try:
+            async with self.new_intercepted_page() as page:
+                logger.info(f'Using search term: {search_term}')
+                search_page_urls = await perform_google_search(page, search_term, dir_path, num_of_results_pages_to_scrape, search_url=search_url)
+
+            logger.info("Preparing manifest...")
+            manifest_map = await create_manifest_for_urls(search_page_urls, category)
+            logger.info("Manifest created")
+            logger.info("System attempting to create PDF and TXT files out of the extracted URLs, this may take a while...")
+            await self.prepare_pdfs(manifest_map, dir_path)
+            logger.info("PDF and TXT extraction complete.")
+        except Exception as e:
+            logger.error('Error occurred in search and download', e)
