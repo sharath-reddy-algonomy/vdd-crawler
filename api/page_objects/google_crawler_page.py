@@ -173,11 +173,11 @@ async def perform_google_search(page, search_term: str, working_dir, num_pages_t
                     )
                 except TimeoutError as e:
                     logger.info(f'Timed-out waiting to confirm, proceeding without confirmation: {e}')
-                    await dump_markup(page, f'{working_dir}/markup_dump_timeout.html')
+                    #await dump_markup(page, f'{working_dir}/markup_dump_timeout.html')
                 except Exception as e:
                     logger.info(f'Error occurred navigating: {e}')
-                    await dump_markup(page, f'{working_dir}/markup_dump_error.html')
-                    await to_pdf(page, f'{working_dir}/google_navigation_error.pdf')
+                    #await dump_markup(page, f'{working_dir}/markup_dump_error.html')
+                    #await to_pdf(page, f'{working_dir}/google_navigation_error.pdf')
 
                 search_page_urls.update(await extract_urls(page))
                 logger.info(f'Found {len(search_page_urls)} URLs')
