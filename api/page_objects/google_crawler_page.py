@@ -56,12 +56,13 @@ async def intercept_request (request):
         'media',
         'object',
         'texttrack',
-        'stylesheet',
     ]
+
     if request.resourceType in blocked_resource_types:
-        logger.info (f'Blocked type: {request.resourceType}, url: {request.url}')
+        logger.debug (f'Blocked type: {request.resourceType}, url: {request.url}')
         await request.abort()
     else:
+        logger.debug(f'Making request: {request.resourceType}: {request.url}')
         await request.continue_()
 
 
@@ -172,11 +173,11 @@ class CrawlerPage:
 
             pdf_path = working_dir + '/google_results.pdf'
             await page.pdf(path=pdf_path)
+
         except TimeoutError as te:
             logger.error(f'Timeout error occurred while performing search: {te}')
             pdf_path = working_dir + '/google_error.pdf'
             await page.pdf(path=pdf_path)
-            return None
 
         self.page_number = 1
         return page
@@ -187,16 +188,24 @@ class CrawlerPage:
             logger.info(f'Navigating to page {self.page_number}')
             page_selector = f'div[aria-label="Page {self.page_number}"]'
             page_selector_to_check = f'div[aria-label="Page {self.page_number - 1}"]'
-            await asyncio.gather(
-                page.waitForNavigation(),
-                page.click(page_selector),
-            )
+            await page.waitForSelector(page_selector)
+            try:
+                await asyncio.gather(
+                    page.waitForNavigation({'timeout':60000}),
+                    page.click(page_selector),
+                )
+            except TimeoutError as e:
+                logger.info('Timed-out waiting to confirm, proceeding without confirmation.')
+
             await page.waitForSelector(page_selector_to_check)
+            logger.info('Generating google search results PDF...')
             pdf_path = working_dir + f'/google_results_{self.page_number}.pdf'
             await page.pdf(path=pdf_path)
+            logger.info('PDF Generated')
 
             return page
         except TimeoutError as e:
+            logger.error('Timed-out navigating to the next page.')
             return page
         except Exception as e:
             logger.error(f'Error navigating to next page: {e}')
@@ -215,7 +224,7 @@ class CrawlerPage:
                     await stealth(page)
                     try:
                         pdf_path = path.join(working_dir, f'{file_name}.pdf')
-                        await asyncio.wait_for(to_pdf(page, url, pdf_path), timeout=60)
+                        await asyncio.wait_for(to_pdf(page, url, pdf_path), timeout=90)
                     except ForcedTimeoutError as e:
                         logger.error('Page either too large or is taking too long to load. Skipping')
                     except PageError as e:
