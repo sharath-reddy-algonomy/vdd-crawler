@@ -78,7 +78,7 @@ async def poll_messages():
         while True:
             response = sqs.receive_message(
                 QueueUrl=queue_url,
-                MaxNumberOfMessages=5,
+                MaxNumberOfMessages=1,
                 WaitTimeSeconds=10  # Long polling
             )
 
