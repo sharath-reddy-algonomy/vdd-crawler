@@ -242,7 +242,7 @@ class CrawlerPage:
             file_path = f"{working_dir}/{file_name}.pdf"
             if url.lower().endswith('.pdf'):
                 logger.info(f'Downloading PDF: {url} to {file_name}')
-                await write_pdf_file(url, file_path)
+                await asyncio.wait_for(write_pdf_file(url, file_path), timeout=90)
                 logger.info(f'Downloaded PDF: {url} to {file_path}')
             else:
                 async with self.new_page() as page:
