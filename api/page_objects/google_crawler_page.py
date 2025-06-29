@@ -241,9 +241,14 @@ class CrawlerPage:
         for url, file_name in urls_manifest.items():
             file_path = f"{working_dir}/{file_name}.pdf"
             if url.lower().endswith('.pdf'):
-                logger.info(f'Downloading PDF: {url} to {file_name}')
-                await asyncio.wait_for(write_pdf_file(url, file_path), timeout=90)
-                logger.info(f'Downloaded PDF: {url} to {file_path}')
+                try:
+                    logger.info(f'Downloading PDF: {url} to {file_name}')
+                    await asyncio.wait_for(write_pdf_file(url, file_path), timeout=90)
+                    logger.info(f'Downloaded PDF: {url} to {file_path}')
+                except ForcedTimeoutError as e:
+                    logger.error('PDF either too large or it is taking too long to load. Skipping.')
+                except Exception as e:
+                    logger.error(f'Error occurred while downloading PDF: {e}')
             else:
                 async with self.new_page() as page:
                     logger.info(f'Converting page: {url} to PDF {file_name}')
