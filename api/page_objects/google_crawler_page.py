@@ -178,13 +178,16 @@ async def perform_google_search(page, search_term: str, working_dir, num_pages_t
         while page_number <= num_pages_to_crawl:
             if await can_paginate(page):
                 logger.info(f'Navigating to page {page_number}...')
-                await page.waitForXPath('//div[@class="gsc-cursor-page"][1]')
+                await page.waitForXPath(f'//div[@class="gsc-cursor-page"][{page_number}]')
                 elements_to_click = await page.xpath(f'//div[@role="link"][{page_number - 1}]')
                 try:
                     await asyncio.gather(
+                        elements_to_click[0].click(),
                         page.waitForNavigation(),
-                        elements_to_click[0].click()
                     )
+                    await asyncio.sleep(5)
+                    on_page = await page.querySelectorEval('.gsc-cursor-current-page', 'node => node.innerText')
+                    logger.info(f"Currently on page {on_page}")
                 except TimeoutError as e:
                     logger.info(f'Timed-out waiting to confirm, proceeding without confirmation: {e}')
                     #await dump_markup(page, f'{working_dir}/markup_dump_timeout.html')
@@ -208,6 +211,7 @@ async def perform_google_search(page, search_term: str, working_dir, num_pages_t
         await to_pdf(page, pdf_path)
     except Exception as e:
         logger.error(f'Error occurred searching Google: {e}')
+        #await dump_markup(page, f'{working_dir}/markup_dump_search_error.html')
     return search_page_urls
 
 
