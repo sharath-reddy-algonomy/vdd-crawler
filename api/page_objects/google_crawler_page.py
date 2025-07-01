@@ -5,7 +5,7 @@ from typing import Set
 from pyppeteer.errors import PageError, TimeoutError, NetworkError
 from pyppeteer_stealth import stealth
 from urllib.request import urlopen
-from api.config import DEFAULT_SEARCH_ENGINE_URL, PACKETSTREAM_PROXY_URL, PACKETSTREAM_USERNAME, PACKETSTREAM_PASSWORD
+from api.config import DEFAULT_SEARCH_ENGINE_URL, PACKETSTREAM_USERNAME, PACKETSTREAM_PASSWORD, PACKETSTREAM_PROXY_DOMAIN, PACKETSTREAM_HTTPS_PORT, PACKETSTREAM_HTTP_PORT
 from pyppeteer import launch
 from asyncio import TimeoutError as ForcedTimeoutError
 from os import path, makedirs
@@ -140,11 +140,12 @@ async def dump_markup(page, dump_path):
         logger.info (f'Error dumping markup: {e}')
 
 async def get_browser_with_proxy():
+    proxy = f'https://{PACKETSTREAM_PROXY_DOMAIN}:{PACKETSTREAM_HTTPS_PORT}'
     _browser_with_proxy = await launch({
             'executablePath': '/usr/bin/chromium',
             'headless': True,
             'ignoreHTTPSErrors': True,
-            'args': ['--no-sandbox', '--disable-dev-shm-usage', f'--proxy-server={PACKETSTREAM_PROXY_URL}', '--ignore-certificate-errors', '--lang=en-IN,en'],
+            'args': ['--no-sandbox', '--disable-dev-shm-usage', f'--proxy-server={proxy}', '--ignore-certificate-errors', '--lang=en-IN,en'],
     })
     return _browser_with_proxy
 
