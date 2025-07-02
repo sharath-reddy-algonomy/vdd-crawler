@@ -112,12 +112,12 @@ async def write_pdf_file(url, file_path):
         logger.error(f'Error writing PDF file {file_path}: {e}')
 
 async def to_textised_pdf(page, url, pdf_path):
-    logger.info ('Textising the content...')
+    logger.debug ('Textising the content...')
     await page.goto('https://www.textise.net/')
     await page.type('input[name="in"]', url)
     await page.keyboard.press('Enter')
     await page.waitForSelector('div[textise="block"]')
-    logger.info('Done textising')
+    logger.debug('Done textising')
 
     await to_pdf(page, pdf_path)
     logger.info(f'Converted: {url} to PDF {pdf_path}')
@@ -170,14 +170,13 @@ async def perform_google_search(page, search_term: str, working_dir, num_pages_t
         await page.keyboard.press('Enter')
         await page.waitForSelector('div[id="resInfo-0"]')
         search_page_urls.update(await extract_urls(page))
-        logger.info(f'Found {len(search_page_urls)} URLs')
         pdf_path = working_dir + f'/google_results_{page_number}.pdf'
         await to_pdf(page, pdf_path)
 
         page_number = 2
         while page_number <= num_pages_to_crawl:
             if await can_paginate(page):
-                logger.info(f'Navigating to page {page_number}...')
+                logger.debug(f'Navigating to page {page_number}...')
                 await page.waitForXPath(f'//div[@class="gsc-cursor-page"][{page_number}]')
                 elements_to_click = await page.xpath(f'//div[@role="link"][{page_number - 1}]')
                 try:
@@ -187,21 +186,19 @@ async def perform_google_search(page, search_term: str, working_dir, num_pages_t
                     )
                     await asyncio.sleep(5)
                     on_page = await page.querySelectorEval('.gsc-cursor-current-page', 'node => node.innerText')
-                    logger.info(f"Currently on page {on_page}")
+                    logger.debug(f"On page {on_page}")
                 except TimeoutError as e:
-                    logger.info(f'Timed-out waiting to confirm, proceeding without confirmation: {e}')
+                    logger.error(f'Timed-out waiting to confirm, proceeding without confirmation: {e}')
                     #await dump_markup(page, f'{working_dir}/markup_dump_timeout.html')
                 except Exception as e:
-                    logger.info(f'Error occurred navigating: {e}')
+                    logger.error(f'Error occurred navigating: {e}')
                     #await dump_markup(page, f'{working_dir}/markup_dump_error.html')
                     #await to_pdf(page, f'{working_dir}/google_navigation_error.pdf')
 
                 search_page_urls.update(await extract_urls(page))
-                logger.info(f'Found {len(search_page_urls)} URLs')
-                logger.info('Generating google search results PDF...')
+                logger.debug('Generating google search results PDF...')
                 pdf_path = working_dir + f'/google_results_{page_number}.pdf'
                 await to_pdf(page, pdf_path)
-                logger.info('PDF Generated')
                 page_number += 1
             else:
                 break
@@ -212,6 +209,7 @@ async def perform_google_search(page, search_term: str, working_dir, num_pages_t
     except Exception as e:
         logger.error(f'Error occurred searching Google: {e}')
         #await dump_markup(page, f'{working_dir}/markup_dump_search_error.html')
+    logger.info(f'Found {len(search_page_urls)} URLs')
     return search_page_urls
 
 
@@ -246,20 +244,20 @@ class CrawlerPage:
             file_path = f"{working_dir}/{file_name}.pdf"
             if url.lower().endswith('.pdf'):
                 try:
-                    logger.info(f'Downloading PDF: {url} to {file_name}')
+                    logger.info(f'Processing {file_name} -> {url}')
                     await asyncio.wait_for(write_pdf_file(url, file_path), timeout=90)
-                    logger.info(f'Downloaded PDF: {url} to {file_path}')
                 except ForcedTimeoutError as e:
                     logger.error('PDF either too large or it is taking too long to load. Skipping.')
                 except Exception as e:
                     logger.error(f'Error occurred while downloading PDF: {e}')
             else:
                 async with self.new_page() as page:
-                    logger.info(f'Converting page: {url} to PDF {file_name}')
+                    logger.info(f'Processing {file_name} -> {url}')
                     await stealth(page)
                     try:
                         pdf_path = path.join(working_dir, f'{file_name}.pdf')
-                        await asyncio.wait_for(to_textised_pdf(page, url, pdf_path), timeout=90)
+                        await page.goto(url, {'waituntil': 'networkidle0', 'timeout': 60000})
+                        await asyncio.wait_for(to_pdf(page, pdf_path), timeout=90)
                     except ForcedTimeoutError as e:
                         logger.error('Page either too large or is taking too long to load. Skipping')
                     except PageError as e:
@@ -284,9 +282,7 @@ class CrawlerPage:
 
             logger.info("Preparing manifest...")
             manifest_map = await create_manifest_for_urls(search_page_urls, category)
-            logger.info("Manifest created")
-            logger.info("System attempting to create PDF and TXT files out of the extracted URLs, this may take a while...")
+            logger.info("Downloading...")
             await self.prepare_pdfs(manifest_map, dir_path)
-            logger.info("PDF and TXT extraction complete.")
         except Exception as e:
             logger.error('Error occurred in search and download', e)
