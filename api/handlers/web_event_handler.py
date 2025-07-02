@@ -2,11 +2,15 @@ import sys
 import boto3
 import json
 import asyncio
+import logging
 
 sys.path.append("/app")
 
 from api.config import REGION_NAME, MSG_PUBLISHER, USE_LOCALSTACK, SQS_QUEUE_NAME, LOCAL_AWS_ENDPOINT_URL
 from api.crawlers.crawler_orchestrator import perform_due_diligence_v2
+from api.logger_config import setup_logging
+
+logger = logging.getLogger('listener')
 
 sqs = boto3.client(
     "sqs",
@@ -18,7 +22,7 @@ queue_url = sqs.get_queue_url(QueueName=SQS_QUEUE_NAME)['QueueUrl']
 
 
 def schedule_run(message, subject=None):
-    print(f"Using LocalStack {USE_LOCALSTACK}", flush=True)
+    logger.debug(f"Using LocalStack {USE_LOCALSTACK}")
     sns_client = boto3.client(
         'sns',
         region_name=REGION_NAME,
@@ -37,10 +41,10 @@ def schedule_run(message, subject=None):
                 TopicArn=MSG_PUBLISHER,
                 Message=message
             )
-        print(f"Message sent to topic {MSG_PUBLISHER}", flush=True)
-        print(f"Message ID: {response['MessageId']}", flush=True)
+        logger.info(f"Message sent to topic {MSG_PUBLISHER}")
+        logger.debug(f"Message ID: {response['MessageId']}")
     except Exception as e:
-        print(f"Error sending message to topic {MSG_PUBLISHER}: {e}", flush=True)
+        logger.error(f"Error sending message to topic {MSG_PUBLISHER}: {e}")
 
 
 async def process_message(message_body, message_id):
@@ -56,23 +60,22 @@ async def process_message(message_body, message_id):
         website_url = payload["website_url"]
         crawlers = payload["crawlers"]
 
-
-        print(f"Received message with ID {message_id} for vendor: {vendor_name}", flush=True)
-        print(f"Schedule ID: {schedule_id}", flush=True)
-        print(f"Pages to process: {pages}", flush=True)
-        print(f"Directors for {vendor_name}: {directors}", flush=True)
-        print(f"Website URL of {vendor_name}: {website_url}", flush=True)
-        print(f"Crawlers chosen: {crawlers}", flush=True)
+        logger.debug(f"Received message with ID {message_id} for vendor: {vendor_name}")
+        logger.info(f"Schedule ID: {schedule_id}")
+        logger.info(f"Pages to process: {pages}")
+        logger.info(f"Directors for {vendor_name}: {directors}")
+        logger.info(f"Website URL of {vendor_name}: {website_url}")
+        logger.info(f"Crawlers chosen: {crawlers}")
 
         await perform_due_diligence_v2(payload)
-        print(f"Completed processing message with ID {message_id}.", flush=True)
+        logger.info(f"Completed processing message with ID {message_id}.")
 
     except Exception as e:
-        print(f"Failed to process message: {e}", flush=True)
+        logger.error(f"Failed to process message: {e}")
 
 
 async def poll_messages():
-    print("Polling for messages...", flush=True)
+    logger.info("Polling for messages...")
 
     try:
         while True:
@@ -89,7 +92,7 @@ async def poll_messages():
             tasks = []
             to_delete = []
             for message in messages:
-                print("Received message:", message["MessageId"], flush=True)
+                logger.info(f"Received message: {message['MessageId']}")
                 tasks.append(process_message(message["Body"], message["MessageId"]))
                 to_delete.append(message["ReceiptHandle"])
             await asyncio.gather(*tasks)
@@ -100,9 +103,10 @@ async def poll_messages():
                     ReceiptHandle=receipt_handle
                 )
     except Exception as e:
-        print(f"Polling error: {e}", flush=True)
+        logger.error(f"Polling error: {e}")
         await asyncio.sleep(5)
 
 
 if __name__ == "__main__":
+    setup_logging()
     asyncio.run(poll_messages())

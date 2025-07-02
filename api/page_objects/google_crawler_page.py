@@ -16,8 +16,7 @@ import pymupdf
 import datetime
 from pymupdf import utils
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("crawler")
+logger = logging.getLogger('Google Page')
 
 async def extract_urls(page) -> Set[str]:
     try:

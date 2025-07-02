@@ -3,8 +3,7 @@ from api.crawlers.Crawlers import CRAWLER_REGISTRY, BaseCrawler
 import os
 import logging
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("crawler")
+logger = logging.getLogger('orchestrator')
 
 
 async def perform_due_diligence_v2(json_payload):
@@ -23,8 +22,7 @@ async def perform_due_diligence_v2(json_payload):
             if crawler.get_search_engine_url() is None:
                 logger.error(f"Search engine for {crawler.get_category()} not set, skipping this crawler.")
                 continue
-            logger.info (f"Starting {beautified_crawler_requested} search for schedule {schedule_id}...")
-            logger.info(f"Using {vendor_name}, {website_url}...")
+            logger.info(f"Starting {beautified_crawler_requested} search for schedule {schedule_id}...")
             await crawler.crawl(vendor_name, directors, schedule_id, pages, website_url)
             logger.info(f"Completed {beautified_crawler_requested} search for schedule {schedule_id}.")
         else:

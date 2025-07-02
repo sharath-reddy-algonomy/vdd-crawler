@@ -8,4 +8,4 @@ from api.routes.websites import website_router
 app = FastAPI()
 
 app.include_router(crawler_router)
-app.include_router(website_router)
+

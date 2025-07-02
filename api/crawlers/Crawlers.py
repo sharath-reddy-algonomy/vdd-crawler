@@ -4,8 +4,7 @@ from api.config import REGULATORY_DATABASE_SEARCH_ENGINE_URL, DEFAULT_SEARCH_ENG
 
 import logging
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("crawler")
+logger = logging.getLogger('crawlers')
 
 
 def get_search_term(actor_name) -> str:
@@ -102,6 +101,31 @@ class RegulatoryDatabaseCrawler(GoogleCrawler):
 
     def should_crawl_for_director(self):
         return False
+
+    def strip_vendor_business_suffix(self, vendor_name):
+        suffixes_to_remove = [" Limited", " Ltd", " Pvt Ltd"]
+        cleaned_name = vendor_name
+        for suffix in suffixes_to_remove:
+            cleaned_name = cleaned_name.replace(suffix, "")
+        return cleaned_name.strip()
+
+    async def crawl(self, actor_name, directors, schedule_id, pages, site_url: None):
+        google_page = CrawlerPage()
+        stripped_vendor_name = self.strip_vendor_business_suffix(actor_name)
+        logger.info(f"Performing BSE Search for {actor_name}...")
+        search_term = f'-filetype:pdf -filetype:xls -filetype:xlsx site:https://www.bseindia.com/ "{stripped_vendor_name}"'
+        await google_page.search_and_download(search_term, pages, f"{schedule_id}/{self.get_category()}/BSE",
+                                              search_url=self.get_search_engine_url())
+
+        logger.info(f"Performing NSE Search for {actor_name}...")
+        search_term = f'-filetype:pdf -filetype:xls -filetype:xlsx site:https://www.nseindia.com/ "{stripped_vendor_name}"'
+        await google_page.search_and_download(search_term, pages, f"{schedule_id}/{self.get_category()}/NSE",
+                                              search_url=self.get_search_engine_url())
+
+        await super().crawl(actor_name, directors, schedule_id, pages, site_url)
+
+
+
 
 
 class OfficialWebsiteCrawler(BaseCrawler):
