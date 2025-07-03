@@ -1,3 +1,5 @@
+import json
+import os.path
 from contextlib import asynccontextmanager
 from bs4 import BeautifulSoup
 from typing import Dict
@@ -14,7 +16,10 @@ import logging
 import fitz
 import pymupdf
 import datetime
+import humanize
 from pymupdf import utils
+
+from api.util.ManifestUtils import Manifest, ManifestEntry
 
 logger = logging.getLogger('Google Page')
 
@@ -68,13 +73,17 @@ async def intercept_request (request):
 
 async def extract_text_from_pdf(pdf_path: str):
     try:
-        doc = fitz.open(pdf_path)
-        text_file_path = path.splitext(pdf_path)[0] + '.txt'
-        with open(text_file_path, 'w') as text_file:
-            for page_num in range(doc.page_count):
-                page = doc.load_page(page_num)
-                text_file.write(page.get_text())
-        logger.info(f"Text extracted and saved to {text_file_path}")
+        if os.path.exists(pdf_path):
+            file_size_in_bytes = os.path.getsize(pdf_path)
+            file_size = humanize.naturalsize(file_size_in_bytes)
+            logger.info (f'Extracting text from PDF may take some time depending on the size of the PDF. Size: {file_size}')
+            doc = fitz.open(pdf_path)
+            text_file_path = path.splitext(pdf_path)[0] + '.txt'
+            with open(text_file_path, 'w') as text_file:
+                for page_num in range(doc.page_count):
+                    page = doc.load_page(page_num)
+                    text_file.write(page.get_text())
+            logger.info(f"Text extracted and saved to {text_file_path}")
     except Exception as e:
         logger.error(f"Error extracting text from {pdf_path}: {e}")
 
@@ -213,6 +222,12 @@ async def perform_google_search(page, search_term: str, working_dir, num_pages_t
     return search_page_urls
 
 
+def create_final_manifest(manifest, path):
+    manifest_file_path = f'{path}/manifest.json'
+    with open (manifest_file_path, 'w') as manifest_file:
+        manifest_file.write(json.dumps(manifest, default=vars))
+
+
 class CrawlerPage:
 
     @asynccontextmanager
@@ -240,32 +255,40 @@ class CrawlerPage:
                 logger.info('Error while closing browser.', e)
 
     async def prepare_pdfs(self, urls_manifest: Dict, working_dir):
+        manifest = Manifest()
         for url, file_name in urls_manifest.items():
+            manifest_entry = ManifestEntry(url, file_name)
             file_path = f"{working_dir}/{file_name}.pdf"
             if url.lower().endswith('.pdf'):
                 try:
                     logger.info(f'Processing {file_name} -> {url}')
-                    await asyncio.wait_for(write_pdf_file(url, file_path), timeout=90)
+                    await asyncio.wait_for(write_pdf_file(url, file_path), timeout=120)
+                    manifest_entry.set_status(True)
                 except ForcedTimeoutError as e:
                     logger.error('PDF either too large or it is taking too long to load. Skipping.')
                 except Exception as e:
                     logger.error(f'Error occurred while downloading PDF: {e}')
             else:
-                async with self.new_page() as page:
+                async with self.new_intercepted_page() as page:
                     logger.info(f'Processing {file_name} -> {url}')
                     await stealth(page)
                     try:
                         pdf_path = path.join(working_dir, f'{file_name}.pdf')
-                        await page.goto(url, {'waituntil': 'networkidle0', 'timeout': 60000})
+                        logger.info(f'Loading page :{url}')
+                        await page.goto(url, {'waituntil': 'networkidle0', 'timeout': 120000})
+                        logger.info(f'Converting to PDF')
                         await asyncio.wait_for(to_pdf(page, pdf_path), timeout=90)
+                        manifest_entry.set_status(True)
                     except ForcedTimeoutError as e:
-                        logger.error('Page either too large or is taking too long to load. Skipping')
+                        logger.error('Page taking too long to load. Skipping')
                     except PageError as e:
                         logger.error(f'Page error converting page to PDF: {url}: {e}')
                     except NetworkError as e:
                         logger.error(f'Network error converting page to PDF: {url}: {e}')
-
+            manifest.add(manifest_entry)
             await extract_text_from_pdf(file_path)
+        return manifest
+
 
     async def search_and_download(self, search_term: str,
         num_of_results_pages_to_scrape: int,
@@ -283,6 +306,7 @@ class CrawlerPage:
             logger.info("Preparing manifest...")
             manifest_map = await create_manifest_for_urls(search_page_urls, category)
             logger.info("Downloading...")
-            await self.prepare_pdfs(manifest_map, dir_path)
+            manifest = await self.prepare_pdfs(manifest_map, dir_path)
+            create_final_manifest(manifest, dir_path)
         except Exception as e:
             logger.error('Error occurred in search and download', e)
