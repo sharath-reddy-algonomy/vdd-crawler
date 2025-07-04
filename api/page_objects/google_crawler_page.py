@@ -111,14 +111,12 @@ def insert_date_to_pdf(pdf_path):
     doc.close()
 
 async def write_pdf_file(url, file_path):
-    try:
-        pdf_content = urlopen(url)
-        with open(file_path, 'wb') as f:
-            f.write(pdf_content.read())
-        insert_date_to_pdf(file_path)
-        logger.info(f'Converted page: {url} to PDF {file_path}')
-    except Exception as e:
-        logger.error(f'Error writing PDF file {file_path}: {e}')
+    pdf_content = urlopen(url)
+    with open(file_path, 'wb') as f:
+        f.write(pdf_content.read())
+    insert_date_to_pdf(file_path)
+    logger.info(f'Converted page: {url} to PDF {file_path}')
+
 
 async def to_textised_pdf(page, url, pdf_path):
     logger.debug ('Textising the content...')
@@ -132,12 +130,10 @@ async def to_textised_pdf(page, url, pdf_path):
     logger.info(f'Converted: {url} to PDF {pdf_path}')
 
 async def to_pdf(page, pdf_path):
-    try:
-        await page.emulateMedia('screen')
-        await page.pdf(path=pdf_path)
-        insert_date_to_pdf(pdf_path)
-    except Exception as e:
-        logger.error(f'Failed creating PDF: {e}')
+    await page.emulateMedia('screen')
+    await page.pdf(path=pdf_path)
+    insert_date_to_pdf(pdf_path)
+
 
 async def dump_markup(page, dump_path):
     try:
@@ -285,6 +281,8 @@ class CrawlerPage:
                         logger.error(f'Page error converting page to PDF: {url}: {e}')
                     except NetworkError as e:
                         logger.error(f'Network error converting page to PDF: {url}: {e}')
+                    except Exception as e:
+                        logger.error(f'Error occurred while converting page to PDF {url}: {e}')
             manifest.add(manifest_entry)
             await extract_text_from_pdf(file_path)
         return manifest

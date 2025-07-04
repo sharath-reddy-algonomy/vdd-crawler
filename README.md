@@ -1,6 +1,29 @@
 # vdd-data-crawler
 Vendor Due Diligence Data Crawler
 
+The crawler is meant to perform a google search for the vendor received as input with the below configurations:
+1. Number of pages to crawl
+2. Crawlers to use (GOOGLE, NEWS, REGULATORY_DATABASES, OFFICIAL_WEBSITE)
+3. Directors - List of directors; only used by GOOGLE crawler
+4. Website - official website of the vendor; only used by the OFFICIAL_WEBSITE crawler
+
+Workflow: google search -> extract URLs -> Crawl each link and download content.
+
+Crawler uses different Google Custom Search Engines(CSE) to perform different types of crawls. 
+Search engines are configurable using the environment variables.
+GOOGLE: Meant for generic google search. Control over which sites to exclude will be in the search engine itself (CSE)
+NEWS: Meant for searching news sites. Sites to crawl are customizable through CSE
+REGULATORY_DATABASES: Meant for searching regulatory databases. Sites to crawl are customizable through CSE
+OFFICIAL_WEBSITE: Crawls vendor's official website; website URL is expected as input for this crawler to work.
+Notes:
+
+1. Crawler has limited control over the content crawled; crawls whatever content google search returns.
+2. Crawler takes its time, be patient.
+3. Once complete, crawler creates a `manifest.json` against each crawl type folder with information about the file names used, URL whose content is extracted, and status indicating if the download was successful or not.
+4. Crawler employs a rotating proxy. Proxy URL, username and passwords are configurable using environment variables.
+5. Proxies can only increase the effectiveness of the crawl to some extent, it doesn't guarantee 100% downloads. 
+6. Report any issues found on this repository using the "Issues" feature of github.
+
 ## PRE-REQUISITE
 
 Python version 3.10 or above
