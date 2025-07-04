@@ -24,6 +24,11 @@ Notes:
 5. Proxies can only increase the effectiveness of the crawl to some extent, it doesn't guarantee 100% downloads. 
 6. Report any issues found on this repository using the "Issues" feature of github.
 
+Known Issues:
+1. BSE (bseindia.com) is behind Akamai's bot detection measures. We have employed features to circumvent anti-bot tech and will be incorporating more (watch out for updates). 
+PDFs generated under BSE will clearly state if crawler has failed to download, retrying is the only option right now. 
+   
+
 ## PRE-REQUISITE
 
 Python version 3.10 or above
