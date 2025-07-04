@@ -1,5 +1,6 @@
 import json
 import os.path
+import ssl
 from contextlib import asynccontextmanager
 from bs4 import BeautifulSoup
 from typing import Dict
@@ -111,7 +112,8 @@ def insert_date_to_pdf(pdf_path):
     doc.close()
 
 async def write_pdf_file(url, file_path):
-    pdf_content = urlopen(url)
+    unverified_context = ssl._create_unverified_context()
+    pdf_content = urlopen(url, context=unverified_context)
     with open(file_path, 'wb') as f:
         f.write(pdf_content.read())
     insert_date_to_pdf(file_path)
@@ -130,8 +132,8 @@ async def to_textised_pdf(page, url, pdf_path):
     logger.info(f'Converted: {url} to PDF {pdf_path}')
 
 async def to_pdf(page, pdf_path):
-    await page.emulateMedia('screen')
-    await page.pdf(path=pdf_path)
+    await page.emulateMedia('print')
+    await page.pdf(path=pdf_path, options={'landscape':True, 'format':'Tabloid'})
     insert_date_to_pdf(pdf_path)
 
 
@@ -250,7 +252,8 @@ class CrawlerPage:
             except Exception as e:
                 logger.info('Error while closing browser.', e)
 
-    async def prepare_pdfs(self, urls_manifest: Dict, working_dir):
+
+    async def prepare_pdfs(self, urls_manifest: Dict, working_dir, use_proxy):
         manifest = Manifest()
         for url, file_name in urls_manifest.items():
             manifest_entry = ManifestEntry(url, file_name)
@@ -265,13 +268,19 @@ class CrawlerPage:
                 except Exception as e:
                     logger.error(f'Error occurred while downloading PDF: {e}')
             else:
-                async with self.new_intercepted_page() as page:
+                if use_proxy:
+                    chosen_page = self.new_intercepted_page()
+                else:
+                    chosen_page = self.new_page()
+
+                async with chosen_page as page:
                     logger.info(f'Processing {file_name} -> {url}')
                     await stealth(page)
                     try:
                         pdf_path = path.join(working_dir, f'{file_name}.pdf')
                         logger.info(f'Loading page :{url}')
                         await page.goto(url, {'waituntil': 'networkidle0', 'timeout': 120000})
+                        await asyncio.sleep(3)
                         logger.info(f'Converting to PDF')
                         await asyncio.wait_for(to_pdf(page, pdf_path), timeout=90)
                         manifest_entry.set_status(True)
@@ -291,7 +300,7 @@ class CrawlerPage:
     async def search_and_download(self, search_term: str,
         num_of_results_pages_to_scrape: int,
         category: str,
-        search_url=DEFAULT_SEARCH_ENGINE_URL):
+        search_url=DEFAULT_SEARCH_ENGINE_URL, use_proxy=True):
 
         dir_path = f'./tmp/{category}'
         makedirs(dir_path, exist_ok=True)
@@ -304,7 +313,7 @@ class CrawlerPage:
             logger.info("Preparing manifest...")
             manifest_map = await create_manifest_for_urls(search_page_urls, category)
             logger.info("Downloading...")
-            manifest = await self.prepare_pdfs(manifest_map, dir_path)
+            manifest = await self.prepare_pdfs(manifest_map, dir_path, use_proxy)
             create_final_manifest(manifest, dir_path)
         except Exception as e:
             logger.error('Error occurred in search and download', e)

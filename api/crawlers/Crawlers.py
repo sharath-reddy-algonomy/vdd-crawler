@@ -115,12 +115,12 @@ class RegulatoryDatabaseCrawler(GoogleCrawler):
         logger.info(f"Performing BSE Search for {actor_name}...")
         search_term = f'-filetype:pdf -filetype:xls -filetype:xlsx site:https://www.bseindia.com/ "{stripped_vendor_name}"'
         await google_page.search_and_download(search_term, pages, f"{schedule_id}/{self.get_category()}/BSE",
-                                              search_url=self.get_search_engine_url())
+                                              search_url=self.get_search_engine_url(), use_proxy=False)
 
         logger.info(f"Performing NSE Search for {actor_name}...")
         search_term = f'-filetype:pdf -filetype:xls -filetype:xlsx site:https://www.nseindia.com/ "{stripped_vendor_name}"'
         await google_page.search_and_download(search_term, pages, f"{schedule_id}/{self.get_category()}/NSE",
-                                              search_url=self.get_search_engine_url())
+                                              search_url=self.get_search_engine_url(), use_proxy=False)
 
         await super().crawl(actor_name, directors, schedule_id, pages, site_url)
 
