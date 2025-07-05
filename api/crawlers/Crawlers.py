@@ -103,8 +103,8 @@ class RegulatoryDatabaseCrawler(GoogleCrawler):
         return False
 
     def strip_vendor_business_suffix(self, vendor_name):
-        suffixes_to_remove = [" Limited", " Ltd", " Pvt Ltd"]
-        cleaned_name = vendor_name
+        suffixes_to_remove = [" limited", " ltd", " pvt", " private"]
+        cleaned_name = vendor_name.lower()
         for suffix in suffixes_to_remove:
             cleaned_name = cleaned_name.replace(suffix, "")
         return cleaned_name.strip()
