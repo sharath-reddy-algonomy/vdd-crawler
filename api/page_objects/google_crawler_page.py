@@ -136,6 +136,29 @@ async def to_pdf(page, pdf_path):
     await page.pdf(path=pdf_path, options={'landscape':True, 'format':'Tabloid'})
     insert_date_to_pdf(pdf_path)
 
+async def goto_with_retries(page, url, max_retries=3, delay_seconds=5, **kwargs):
+    for attempt in range(1, max_retries + 1):
+        try:
+            logger.info(f"Attempt {attempt} to go to {url}...")
+            response = await page.goto(url, **kwargs)
+
+            if response and response.status < 400:
+               return response
+            else:
+                status_code = response.status if response else "No response"
+                logger.info(f"Google request failed, retrying...")
+
+        except (TimeoutError, NetworkError, PageError) as e:
+            logger.error(f"Navigation to {url} failed: {e}. Retrying...")
+        except Exception as e:
+            logger.error(f"An unexpected error occurred during navigation: {e}. Retrying...")
+
+        if attempt < max_retries:
+            await asyncio.sleep(delay_seconds)
+
+    logger.error(f"Failed to navigate to {url} after {max_retries} attempts.")
+    return None
+
 
 async def dump_markup(page, dump_path):
     try:
@@ -172,7 +195,7 @@ async def perform_google_search(page, search_term: str, working_dir, num_pages_t
     page_number = 1
 
     try:
-        await page.goto(search_url)
+        await goto_with_retries(page, search_url, 3, 5)
         await page.type('input[name="search"]', search_term)
         await page.keyboard.press('Enter')
         await page.waitForSelector('div[id="resInfo-0"]')
